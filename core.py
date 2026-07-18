@@ -88,12 +88,6 @@ def add_log_pressure_height(
     )
 
 
-
- 
-
-
-
- 
 def load_data(fn):
 
     ds = xr.open_dataset(fn)
@@ -125,15 +119,33 @@ def get_parameters_by_latitude(da, latitude = -7):
     
     return sel_lon 
 
-def run_by_levels(ds):
+def get_parameters_by_longitude(da, longitude = -35):
+    ds_sel = da.sel(longitude = longitude, method = "nearest")
+    
+    sel_lon = ds_sel['t'].to_pandas().to_frame('t')
+    
+    sel_lon['altitude'] = da['altitude'].item()
+    
+    sel_lon["time"] = pd.Timestamp(da["time"].values)
+    sel_lon = sel_lon.reset_index()
+    
+    return sel_lon 
+
+
+def run_by_levels(ds, lat = True):
     out = []
     for level in ds.level.values:
-     
-        out.append(
-            get_parameters_by_latitude(
-                ds.sel(level = level)
+        
+        df = ds.sel(level = level)
+        
+        if lat:
+            out.append(
+                get_parameters_by_latitude( df )
                 )
-            )
+        else:
+            out.append(
+                get_parameters_by_longitude( df )
+                )
     
     return pd.concat(out)
 
@@ -157,3 +169,15 @@ def main():
         ds =  run_by_time(load_data(infile + fn), fn)
         
         ds.to_csv(save_in + fn.replace('nc', 'txt'))
+        
+
+# fn = "D:\\database\\JAWARA\\T\\T2501.nc"
+# ds = load_data(fn)
+
+# ds = ds.isel(time = 0)
+# da = ds.isel(level = 0)
+
+# get_parameters_by_longitude(da, longitude = -35)
+
+
+main()
