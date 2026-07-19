@@ -4,8 +4,271 @@ from __future__ import annotations
 
 import numpy as np
 import xarray as xr
+ 
+
+from scipy.signal import (
+    butter,
+    sosfiltfilt,
+    detrend
+)
 
 
+def bandpass_1d(
+    x,
+    low_period,
+    high_period,
+    fs=1.0,
+    order=4,
+    handle_nan=True,
+    remove_trend=True
+):
+    """
+    Aplica um filtro Butterworth passa-banda a uma série 1D.
+
+    Parameters
+    ----------
+    x : array
+        Série temporal.
+
+    low_period : float
+        Menor período da banda, em dias.
+
+    high_period : float
+        Maior período da banda, em dias.
+
+    fs : float
+        Frequência de amostragem em amostras por dia.
+
+    order : int
+        Ordem do filtro.
+
+    handle_nan : bool
+        Interpola valores ausentes antes da filtragem.
+
+    remove_trend : bool
+        Remove média e tendência linear antes do filtro.
+
+    Returns
+    -------
+    array
+        Série filtrada.
+    """
+
+    x = np.asarray( x, dtype=np.float64 )
+
+    output = np.full_like( x, np.nan )
+
+    valid = np.isfinite(x)
+
+    # Série sem dados suficientes
+    if valid.sum() < 20:
+        return output
+
+    if handle_nan:
+        index = np.arange(x.size)
+
+        x_filled = np.interp(
+            index,
+            index[valid],
+            x[valid]
+        )
+
+    else:
+        if not valid.all():
+            return output
+
+        x_filled = x.copy()
+
+    if remove_trend:
+        x_filled = detrend(
+            x_filled,
+            type="linear"
+        )
+
+    # Frequências em ciclos por dia
+    low_frequency = 1.0 / high_period
+    high_frequency = 1.0 / low_period
+
+    nyquist = 0.5 * fs
+
+    if high_frequency >= nyquist:
+        raise ValueError(
+            "A frequência superior da banda deve ser "
+            "menor que a frequência de Nyquist."
+        )
+
+    normalized_frequency = [
+        low_frequency / nyquist,
+        high_frequency / nyquist
+    ]
+
+    sos = butter(
+        order,
+        normalized_frequency,
+        btype="bandpass",
+        output="sos"
+    )
+
+    filtered = sosfiltfilt(
+        sos,
+        x_filled
+    )
+
+    # Restaura NaN nas posições originalmente ausentes
+    filtered[~valid] = np.nan
+
+    return filtered
+
+def bandpass_xarray(
+    da,
+    low_period=5,
+    high_period=7,
+    order=4,
+    time_dim="time"
+):
+    """
+    Aplica bandpass_1d ao longo da dimensão temporal
+    de um xarray.DataArray.
+    """
+
+    # Intervalo temporal em dias
+    dt_days = float( np.median(  
+        np.diff(da[time_dim].values)
+            / np.timedelta64(1, "D") ) )
+
+    fs = 1.0 / dt_days
+
+    print( f"Intervalo temporal: {dt_days:.3f} dia")
+
+    print(  f"Frequência de amostragem: {fs:.1f} amostras/dia")
+
+    # filtfilt precisa que toda a dimensão temporal
+    # esteja em um único bloco Dask
+    if da.chunks is not None:
+        da = da.chunk({
+            time_dim: -1
+        })
+
+    filtered = xr.apply_ufunc(
+        bandpass_1d, da, input_core_dims = [[time_dim]],
+        output_core_dims = [[time_dim]],
+        kwargs={
+            "low_period": low_period,
+            "high_period": high_period,
+            "fs": fs,
+            "order": order,
+            "handle_nan": True,
+            "remove_trend": True,
+        },
+        vectorize=True,
+        dask="parallelized",
+        output_dtypes=[  np.float64 ],
+        dask_gufunc_kwargs={
+            "allow_rechunk": True
+        }
+    )
+
+    # Restaura a ordem original
+    filtered = filtered.transpose(*da.dims)
+
+    filtered.attrs = da.attrs.copy()
+
+    filtered.attrs.update({
+        "filter": "Butterworth bandpass",
+        "low_period": low_period,
+        "high_period": high_period,
+        "period_units": "days",
+        "filter_order": order,
+        "sampling_frequency": fs,
+    })
+
+    return filtered
+
+
+
+
+def bandpass_xarray_fast(
+    da,
+    low_period=5,
+    high_period=7,
+    order=4,
+    time_dim="time",
+    remove_trend=True
+):
+    """
+    Filtro Butterworth vetorizado ao longo do tempo.
+
+    Muito mais rápido que aplicar uma função 1D
+    individualmente em cada ponto espacial.
+    """
+
+    dt_days = float(
+        np.median( np.diff(da[time_dim].values) / np.timedelta64(1, "D") )
+    )
+
+    fs = 1.0 / dt_days
+    nyquist = fs / 2.0
+
+    low_frequency = 1.0 / high_period
+    high_frequency = 1.0 / low_period
+
+    frequencies = [low_frequency / nyquist, high_frequency / nyquist]
+
+    sos = butter(order, frequencies, btype="bandpass", output="sos")
+
+    # Mantém toda a série temporal no mesmo bloco
+    if da.chunks is not None:
+        da = da.chunk({time_dim: -1})
+
+    original_order = da.dims
+
+    # Pequenas falhas são interpoladas ao longo do tempo
+    valid = da.notnull()
+
+    filled = da.interpolate_na(
+        dim=time_dim,
+        method="linear",
+        fill_value="extrapolate"
+    )
+
+    def filter_block(values):
+        """
+        values pode ser multidimensional.
+        O xarray coloca a dimensão core time no último eixo.
+        """
+
+        values = np.asarray( values, dtype=np.float64 )
+
+        if remove_trend:
+            values = detrend(values, axis=-1, type="linear")
+
+        return sosfiltfilt(sos, values, axis=-1)
+
+    filtered = xr.apply_ufunc(
+        filter_block, filled,
+        input_core_dims = [[time_dim]],
+        output_core_dims = [[time_dim]],
+        vectorize = False,
+        dask = "parallelized",
+        output_dtypes = [np.float64],
+        dask_gufunc_kwargs = {"allow_rechunk": False }
+    )
+
+    filtered = filtered.transpose(*original_order)
+
+    # Restaura os NaN originais
+    filtered = filtered.where(valid)
+
+    filtered.attrs = da.attrs.copy()
+
+    filtered.attrs.update({
+        "filter": "Butterworth bandpass",
+        "period_band":  f"{low_period}-{high_period} days",
+        "filter_order": order,
+        "sampling_frequency": f"{fs} samples per day",
+    })
+
+    return filtered
 def compute_ep_flux(
     ds: xr.Dataset,
     *,
@@ -22,7 +285,7 @@ def compute_ep_flux(
     min_abs_cos_latitude: float = 1.0e-3,
 ) -> xr.Dataset:
     
-    required_variables = {"u_prime", "v_prime", "t_prime", "t_bar"}
+    # required_variables = {"u_prime", "v_prime", "t_prime", "t_bar"}
     # missing = required_variables.difference(ds.data_vars)
     
 
@@ -34,8 +297,9 @@ def compute_ep_flux(
         pressure_pa = pressure
     else:
         raise ValueError("pressure_units deve ser 'hPa' ou 'Pa'.")
-    if np.any(np.asarray(pressure_pa.values) <= 0.0):
-        raise ValueError("Todos os níveis de pressão devem ser positivos.")
+        
+    # if np.any(np.asarray(pressure_pa.values) <= 0.0):
+    #     raise ValueError("Todos os níveis de pressão devem ser positivos.")
 
     if "altitude" in ds.coords:
         altitude = ds["altitude"].astype(np.float64)
@@ -78,7 +342,7 @@ def compute_ep_flux(
     theta_bar = work["t_bar"] * theta_factor
     theta_prime = work["t_prime"] * theta_factor
 
-    uv_bar = (work["u_prime"] * work["v_prime"]).mean(
+    uv_bar = (work["u_prime"] * work["v_prime"] ).mean(
         "longitude", skipna=True
     )
     vtheta_bar = (work["v_prime"] * theta_prime).mean(
@@ -97,12 +361,7 @@ def compute_ep_flux(
     # Componentes do fluxo EP, ambos em kg s-2.
     f_phi = -rho0 * earth_radius * cos_latitude * uv_bar
     f_z = (
-        rho0
-        * coriolis
-        * earth_radius
-        * cos_latitude
-        * vtheta_bar
-        / dtheta_dz
+        rho0 * coriolis * earth_radius * cos_latitude * vtheta_bar / dtheta_dz
     )
     f_phi = f_phi.where(valid_latitude)
     f_z = f_z.where(valid_latitude)
@@ -143,26 +402,40 @@ def compute_ep_flux(
     )
 
     metadata = {
-        "uv_bar": ("zonal-mean eddy momentum flux", "m2 s-2"),
-        "theta_bar": ("zonal-mean potential temperature", "K"),
-        "vtheta_bar": ("zonal-mean eddy potential-temperature flux", "K m s-1"),
-        "dtheta_dz": ("vertical gradient of zonal-mean potential temperature", "K m-1"),
-        "rho0": ("reference atmospheric density", "kg m-3"),
-        "F_phi": ("meridional Eliassen-Palm flux", "kg s-2"),
-        "F_z": ("vertical Eliassen-Palm flux", "kg s-2"),
-        "divergence_meridional": ("meridional EP-flux divergence term", "kg m-1 s-2"),
-        "divergence_vertical": ("vertical EP-flux divergence term", "kg m-1 s-2"),
-        "divergence": ("Eliassen-Palm flux divergence", "kg m-1 s-2"),
-        "acceleration": ("wave-induced zonal-wind acceleration", "m s-2"),
-        "acceleration_day": ("wave-induced zonal-wind tendency", "m s-1 day-1"),
+        "uv_bar": 
+            ("zonal-mean eddy momentum flux", "m2 s-2"),
+        "theta_bar": 
+            ("zonal-mean potential temperature", "K"),
+        "vtheta_bar": 
+            ("zonal-mean eddy potential-temperature flux", "K m s-1"),
+        "dtheta_dz": 
+            ("vertical gradient of zonal-mean potential temperature", "K m-1"),
+        "rho0": 
+            ("reference atmospheric density", "kg m-3"),
+        "F_phi": 
+            ("meridional Eliassen-Palm flux", "kg s-2"),
+        "F_z": 
+            ("vertical Eliassen-Palm flux", "kg s-2"),
+        "divergence_meridional": 
+            ("meridional EP-flux divergence term", "kg m-1 s-2"),
+        "divergence_vertical": 
+            ("vertical EP-flux divergence term", "kg m-1 s-2"),
+        "divergence": 
+            ("Eliassen-Palm flux divergence", "kg m-1 s-2"),
+        "acceleration": 
+            ("wave-induced zonal-wind acceleration", "m s-2"),
+        "acceleration_day": 
+            ("wave-induced zonal-wind tendency", "m s-1 day-1"),
     }
     for name, (long_name, units) in metadata.items():
         output[name].attrs = {"long_name": long_name, "units": units}
 
     output.attrs.update(
         {
-            "EP_flux_formulation": "quasi-geostrophic, spherical log-pressure height",
-            "divergence_formula": "1/(a*cos(phi))*d(F_phi*cos(phi))/dphi + dF_z/dz",
+            "EP_flux_formulation":
+                "quasi-geostrophic, spherical log-pressure height",
+            "divergence_formula": 
+                "1/(a*cos(phi))*d(F_phi*cos(phi))/dphi + dF_z/dz",
             "forcing_formula": "div(F)/(rho0*a*cos(phi))",
             "vertical_coordinate_source": vertical_coordinate_source,
         }
@@ -206,307 +479,29 @@ def prepare_latitude_height_field(
 
 # if __name__ == "__main__":
 source = "JAWARA/data/zonal_mean/eddy_fluxes_2501.nc"
-data = xr.open_dataset(source)
-ep = compute_ep_flux(data, hour=0)
-    # ep.to_netcdf("JAWARA/data/zonal_mean/ep_flux_2501.nc")
+results = xr.open_dataset(source)
 
-#%%%%
-F_plot = ep.isel(time = 10) 
-
-F_plot["z_m"] /1000
-F_plot = F_plot.where(F_plot.z_m > 20e3)
-import matplotlib.pyplot as plt 
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-from matplotlib.colors import TwoSlopeNorm
-
-
-def plot_ep_flux_vectors(
-    ep,
-    time,
-    latitude_min=-87,
-    latitude_max=10,
-    altitude_min=15,
-    altitude_max=90,
-    latitude_step=4,
-    altitude_step=4,
-    vector_scale=14,
-    vertical_exaggeration=1.0,
-    percentile=98,
-    figsize=(13, 8)
-):
-    """
-    Plota os vetores do fluxo EP sobre a tendência do vento zonal.
-
-    Parameters
-    ----------
-    ep : xarray.Dataset
-        Deve conter F_phi, F_z e acceleration_day.
-
-    time : str ou datetime
-        Data utilizada no gráfico.
-
-    latitude_min, latitude_max : float
-        Intervalo latitudinal.
-
-    altitude_min, altitude_max : float
-        Intervalo vertical em km.
-
-    latitude_step, altitude_step : int
-        Subamostragem dos vetores.
-
-    vector_scale : float
-        Escala gráfica do quiver. Valores maiores produzem
-        setas menores.
-
-    vertical_exaggeration : float
-        Amplificação gráfica da componente vertical.
-
-    percentile : float
-        Percentil usado para limitar a escala de cores.
-    """
-
-    # Seleção temporal
-    field = ep.sel(
-        time=time,
-        method="nearest"
-    )
-
-    # Seleção espacial
-    field = (
-        field
-        .sortby("latitude")
-        .sortby("z_m")
-        .sel(
-            latitude=slice(
-                latitude_min,
-                latitude_max
-            ),
-            z_m=slice(
-                altitude_min * 1000,
-                altitude_max * 1000
-            )
-        )
-    )
-
-    latitude = field["latitude"]
-    altitude_km = field["z_m"] / 1000.0
-
-    acceleration = field[ "acceleration_day"]
-
-    # Escala simétrica do campo de fundo
-    color_limit = float(
-        np.nanpercentile(
-            np.abs(acceleration.values),
-            percentile
-        )
-    )
-
-    norm = TwoSlopeNorm(
-        vmin=-color_limit,
-        vcenter=0,
-        vmax=color_limit
-    )
-
-    fig, ax = plt.subplots(
-        figsize=figsize
-    )
-
-    # Campo de aceleração
-    contour = ax.contourf(
-        latitude,
-        altitude_km,
-        acceleration,
-        levels=31,
-        cmap="RdBu_r",
-        norm=norm,
-        extend="both"
-    )
-
-    # Contornos adicionais
-    contour_lines = ax.contour(
-        latitude,
-        altitude_km,
-        acceleration,
-        levels=np.linspace(
-            -color_limit,
-            color_limit,
-            9
-        ),
-        colors="0.25",
-        linewidths=0.6
-    )
-
-    ax.clabel(
-        contour_lines,
-        inline=True,
-        fontsize=8,
-        fmt="%.1f"
-    )
-
-    # Subamostragem dos vetores
-    vectors = field.isel(
-        latitude=slice(
-            None,
-            None,
-            latitude_step
-        ),
-        z_m=slice(
-            None,
-            None,
-            altitude_step
-        )
-    )
-
-    F_phi = vectors["F_phi"]
-    F_z = vectors["F_z"]
-
-    # --------------------------------------------------
-    # Normalização gráfica
-    # --------------------------------------------------
-
-    # Normaliza cada componente por uma escala robusta
-    scale_phi = float(
-        np.nanpercentile(
-            np.abs(F_phi.values),
-            95
-        )
-    )
-
-    scale_z = float(
-        np.nanpercentile(
-            np.abs(F_z.values),
-            95
-        )
-    )
-
-    if scale_phi == 0:
-        scale_phi = 1.0
-
-    if scale_z == 0:
-        scale_z = 1.0
-
-    U = F_phi / scale_phi
-
-    V = ( vertical_exaggeration * F_z  / scale_z
-    ) 
-    # Limita vetores extremos
-    magnitude = np.sqrt(
-        U**2 + V**2
-    )
-
-    magnitude_limit = float(
-        np.nanpercentile(
-            magnitude.values,
-            95
-        )
-    )
-
-    factor = xr.where(
-        magnitude > magnitude_limit,
-        magnitude_limit / magnitude,
-        1.0
-    )
-
-    # U = U * factor
-    # V = V * factor
-
-    # Máscara para valores inválidos
-    valid = (
-        np.isfinite(U)
-        & np.isfinite(V)
-    )
-
-    U = U.where(valid)
-    V = V.where(valid)
-
-    quiver = ax.quiver(
-        vectors["latitude"],
-        vectors["z_m"] / 1000.0,
-        U,
-        V,
-        color="black",
-        angles="uv",
-        scale_units="inches",
-        scale=vector_scale,
-        width=0.003,
-        headwidth=4,
-        headlength=5,
-        headaxislength=4.5,
-        pivot="middle"
-    )
-
-    # Chave gráfica
-    ax.quiverkey(
-        quiver,
-        X=0.84,
-        Y=1.04,
-        U=1,
-        label="EP flux vector",
-        labelpos="E",
-        coordinates="axes"
-    )
-
-    # Barra de cores
-    colorbar = fig.colorbar(
-        contour,
-        ax=ax,
-        pad=0.02,
-        aspect=30
-    )
-
-    colorbar.set_label(
-        r"Aceleração zonal "
-        r"(m s$^{-1}$ dia$^{-1}$)"
-    )
-
-    selected_time = np.datetime_as_string(
-        field["time"].values,
-        unit="D"
-    )
-
-    ax.set_title(
-        f"Fluxo EP – {selected_time}",
-        fontweight="bold"
-    )
-
-    ax.set_xlabel("Latitude (°)")
-    ax.set_ylabel("Altitude (km)")
-
-    ax.set_xlim(
-        latitude_min,
-        latitude_max
-    )
-
-    ax.set_ylim(
-        altitude_min,
-        altitude_max
-    )
-
-    ax.tick_params(
-        direction="out"
-    )
-
-    plt.tight_layout()
-
-    return fig, ax
-
-import datetime as dt 
-
-plot_ep_flux_vectors(
-    ep,
-    time = dt.datetime(2025, 1, 1),
-    latitude_min=-80,
-    latitude_max=80,
-    altitude_min=15,
-    altitude_max=140,
-    latitude_step=4,
-    altitude_step=4,
-    vector_scale=14,
-    vertical_exaggeration=1.0,
-    percentile=98,
-    figsize=(13, 8)
+results["u_prime"] = bandpass_xarray(
+    results["u_prime"],
+    low_period=5,
+    high_period=7,
+    order=4
 )
+
+results["v_prime"] = bandpass_xarray(
+    results["v_prime"],
+    low_period=5,
+    high_period=7,
+    order=4
+)
+
+results["t_prime"] = bandpass_xarray(
+    results["t_prime"],
+    low_period=5,
+    high_period=7,
+    order=4
+)
+
+
+ep = compute_ep_flux(results, hour=0)
+    # ep.to_netcdf("JAWARA/data/zonal_mean/ep_flux_2501.nc")
