@@ -171,13 +171,3 @@ def main():
         ds.to_csv(save_in + fn.replace('nc', 'txt'))
         
 
-# fn = "D:\\database\\JAWARA\\T\\T2501.nc"
-# ds = load_data(fn)
-
-# ds = ds.isel(time = 0)
-# da = ds.isel(level = 0)
-
-# get_parameters_by_longitude(da, longitude = -35)
-
-
-main()
