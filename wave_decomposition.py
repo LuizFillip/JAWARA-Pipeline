@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Jul 18 07:22:07 2026
-
-@author: Luiz
-"""
-
 
 import SSW25PW as p
 import waves as wv
