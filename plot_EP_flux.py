@@ -443,14 +443,9 @@ F_phi = results["F_phi"].sortby("latitude")
 F_phi_z = (
     F_phi
     .assign_coords(
-        z_m=(
-            "level",
-            results["altitude"].values * 1000.0
-        )
+        z_m = ("level", results["altitude"].values * 1000.0)
     )
-    .swap_dims({
-        "level": "z_m"
-    })
+    .swap_dims({ "level": "z_m" })
     .sortby("z_m")
     .sortby("latitude")
 )

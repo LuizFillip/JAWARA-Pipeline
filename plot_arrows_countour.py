@@ -1,10 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Jul 19 08:14:17 2026
-
-@author: Luiz
-"""
-
+import datetime as dt 
+import xarray as xr 
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -192,11 +187,11 @@ def plot_ep_flux_vectors(
         )
     )
 
-    factor = xr.where(
-        magnitude > magnitude_limit,
-        magnitude_limit / magnitude,
-        1.0
-    )
+    # factor = xr.where(
+    #     magnitude > magnitude_limit,
+    #     magnitude_limit / magnitude,
+    #     1.0
+    # )
 
     # U = U * factor
     # V = V * factor
@@ -281,8 +276,8 @@ def plot_ep_flux_vectors(
 
     return fig, ax
 
-import datetime as dt 
 
+ep = xr.open_dataset('JAWARA/data/zonal_mean/ep_flux_2501.nc')
 plot_ep_flux_vectors(
     ep,
     time = dt.datetime(2025, 1, 15),
