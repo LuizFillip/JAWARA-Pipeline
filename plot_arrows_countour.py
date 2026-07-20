@@ -63,13 +63,9 @@ def plot_ep_flux_vectors(
         .sortby("latitude")
         .sortby("z_m")
         .sel(
-            latitude=slice(
-                latitude_min,
-                latitude_max
+            latitude=slice( latitude_min,  latitude_max
             ),
-            z_m=slice(
-                altitude_min * 1000,
-                altitude_max * 1000
+            z_m=slice(  altitude_min * 1000, altitude_max * 1000
             )
         )
     )
@@ -81,9 +77,7 @@ def plot_ep_flux_vectors(
 
     # Escala simétrica do campo de fundo
     color_limit = float(
-        np.nanpercentile(
-            np.abs(acceleration.values),
-            percentile
+        np.nanpercentile( np.abs(acceleration.values),  percentile
         )
     )
 
@@ -131,16 +125,8 @@ def plot_ep_flux_vectors(
 
     # Subamostragem dos vetores
     vectors = field.isel(
-        latitude=slice(
-            None,
-            None,
-            latitude_step
-        ),
-        z_m=slice(
-            None,
-            None,
-            altitude_step
-        )
+        latitude=slice( None,  None,  latitude_step ),
+        z_m=slice( None, None, altitude_step )
     )
 
     F_phi = vectors["F_phi"]
@@ -152,16 +138,11 @@ def plot_ep_flux_vectors(
 
     # Normaliza cada componente por uma escala robusta
     scale_phi = float(
-        np.nanpercentile(
-            np.abs(F_phi.values),
-            95
-        )
+        np.nanpercentile( np.abs(F_phi.values), 95 )
     )
 
     scale_z = float(
-        np.nanpercentile(
-            np.abs(F_z.values),
-            95
+        np.nanpercentile( np.abs(F_z.values), 95
         )
     )
 
@@ -173,8 +154,7 @@ def plot_ep_flux_vectors(
 
     U = F_phi / scale_phi
 
-    V = ( vertical_exaggeration * F_z  / scale_z
-    ) 
+    V = ( vertical_exaggeration * F_z  / scale_z ) 
     # Limita vetores extremos
     magnitude = np.sqrt(
         U**2 + V**2
@@ -187,14 +167,14 @@ def plot_ep_flux_vectors(
         )
     )
 
-    # factor = xr.where(
-    #     magnitude > magnitude_limit,
-    #     magnitude_limit / magnitude,
-    #     1.0
-    # )
+    factor = xr.where(
+        magnitude > magnitude_limit,
+        magnitude_limit / magnitude,
+        1.0
+    )
 
-    # U = U * factor
-    # V = V * factor
+    U = U * factor
+    V = V * factor
 
     # Máscara para valores inválidos
     valid = (
@@ -276,17 +256,18 @@ def plot_ep_flux_vectors(
 
     return fig, ax
 
-
-ep = xr.open_dataset('JAWARA/data/zonal_mean/ep_flux_2501.nc')
+dn = dt.datetime(2025, 2, 18)
+fn = dn.strftime('%y%m')
+ep = xr.open_dataset(f'JAWARA/data/zonal_mean/ep_flux_{fn}.nc')
 plot_ep_flux_vectors(
     ep,
-    time = dt.datetime(2025, 1, 15),
-    latitude_min=-80,
-    latitude_max=80,
+    time = dn,
+    latitude_min=0,
+    latitude_max=90,
     altitude_min=15,
-    altitude_max=140,
+    altitude_max=110,
     latitude_step=4,
-    altitude_step=4,
+    altitude_step=5,
     vector_scale=14,
     vertical_exaggeration=1.0,
     percentile=98,
