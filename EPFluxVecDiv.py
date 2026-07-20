@@ -11,6 +11,78 @@ from pathlib import Path
 
 import numpy as np
 
+Rd = 287.05
+g = 9.80665
+
+
+def pressure_to_height_hypsometric(
+    temperature,
+    pressure_hpa,
+    reference_height=0.0
+):
+    """
+    temperature:
+        DataArray com dimensão 'level', em K.
+
+    pressure_hpa:
+        DataArray ou vetor de pressão em hPa.
+
+    Retorna:
+        altitude em metros.
+    """
+
+    p = np.asarray(pressure_hpa, dtype=float) * 100.0
+    T = np.asarray(temperature, dtype=float)
+
+    z = np.full_like(T, np.nan, dtype=float)
+    z[0] = reference_height
+
+    for k in range(1, len(p)):
+        T_mean = 0.5 * (T[k - 1] + T[k])
+
+        dz =  Rd * T_mean / g  * np.log(p[k - 1] / p[k])
+
+        z[k] = z[k - 1] + dz
+
+    return z
+
+
+
+def add_log_pressure_height(
+    ds,
+    level_name="level",
+    p0=1000.0,
+    scale_height=7.0,
+):
+    """
+    Adiciona ao Dataset a coordenada de altura log-pressão:
+
+        z = -H ln(p/p0)
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Dataset com uma coordenada vertical de pressão.
+    level_name : str
+        Nome da coordenada vertical.
+    p0 : float
+        Pressão de referência, em hPa.
+    scale_height : float
+        Altura de escala, em km.
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset com a coordenada 'altitude'.
+    """
+
+    pressure = ds[level_name].astype(float)
+
+    altitude = -scale_height * np.log(pressure / p0)
+
+    return ds.assign_coords(
+        altitude=(level_name, altitude.values)
+    )
 
 @dataclass(frozen=True)
 class EPConstants:
@@ -31,8 +103,6 @@ def pressure_to_height(
 ) -> np.ndarray:
     """Converte pressão (Pa) em altura log-pressão (m)."""
     pressure = np.asarray(pressure, dtype=np.float64)
-    if np.any(~np.isfinite(pressure)) or np.any(pressure <= 0.0):
-        raise ValueError("Os níveis de pressão devem ser positivos e finitos.")
     return -scale_height * np.log(pressure / reference_pressure)
 
 
@@ -47,16 +117,14 @@ def gradient_1d_2nd_order(values: np.ndarray, coordinate: np.ndarray) -> np.ndar
     """Derivada de segunda ordem, inclusive nas bordas, em grade não uniforme."""
     values = np.asarray(values, dtype=np.float64)
     coordinate = np.asarray(coordinate, dtype=np.float64)
-    if values.ndim != 1 or coordinate.ndim != 1 or values.size != coordinate.size:
-        raise ValueError("values e coordinate devem ser vetores de mesmo tamanho.")
-    if values.size < 3:
-        raise ValueError("São necessários pelo menos três pontos.")
-    if np.any(~np.isfinite(coordinate)) or np.any(np.diff(coordinate) == 0.0):
-        raise ValueError("A coordenada deve ser finita e não pode conter repetições.")
+  
     return np.gradient(values, coordinate, edge_order=2)
 
 
-def _gradient_axis(values: np.ndarray, coordinate: np.ndarray, axis: int) -> np.ndarray:
+def _gradient_axis(
+        values: np.ndarray,
+        coordinate: np.ndarray,
+        axis: int) -> np.ndarray:
     """Aplica a derivada de segunda ordem ao longo de um eixo."""
     return np.apply_along_axis(
         gradient_1d_2nd_order, axis, values, np.asarray(coordinate)
@@ -148,39 +216,6 @@ def calculate_ep_flux_3d(
         where=valid_lat[:, None, None],
     )
     return f_phi, f_z, acceleration
-
-
-def save_ep_flux_data(
-    filename: str | Path,
-    latitude: np.ndarray,
-    height_m: np.ndarray,
-    time: np.ndarray,
-    f_phi: np.ndarray,
-    f_z: np.ndarray,
-    acceleration: np.ndarray,
-) -> None:
-    """Salva os resultados em NetCDF; a tendência é convertida para m s-1 dia-1."""
-    try:
-        import xarray as xr
-    except ImportError as exc:
-        raise ImportError("Instale xarray e netCDF4 para salvar arquivos NetCDF.") from exc
-    ds = xr.Dataset(
-        data_vars={
-            "F_phi": (("lat", "z", "time"), f_phi),
-            "F_z": (("lat", "z", "time"), f_z),
-            "accel": (("lat", "z", "time"), acceleration * 86_400.0),
-        },
-        coords={"lat": latitude, "z": height_m, "time": time},
-    )
-    ds["lat"].attrs = {"long_name": "latitude", "units": "degrees_north"}
-    ds["z"].attrs = {"long_name": "log-pressure height", "units": "m"}
-    ds["F_phi"].attrs = {"long_name": "meridional EP flux", "units": "kg s-2"}
-    ds["F_z"].attrs = {"long_name": "vertical EP flux", "units": "kg s-2"}
-    ds["accel"].attrs = {
-        "long_name": "wave-induced zonal-wind tendency",
-        "units": "m s-1 day-1",
-    }
-    ds.to_netcdf(filename)
 
 
 def process_case(
