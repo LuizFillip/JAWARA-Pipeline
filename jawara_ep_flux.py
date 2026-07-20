@@ -6,118 +6,7 @@ import numpy as np
 import xarray as xr
  
 
-from scipy.signal import (
-    butter,
-    sosfiltfilt,
-    detrend
-)
 
-
-def bandpass_1d(
-    x,
-    low_period,
-    high_period,
-    fs=1.0,
-    order=4,
-    handle_nan=True,
-    remove_trend=True
-):
-    """
-    Aplica um filtro Butterworth passa-banda a uma série 1D.
-
-    Parameters
-    ----------
-    x : array
-        Série temporal.
-
-    low_period : float
-        Menor período da banda, em dias.
-
-    high_period : float
-        Maior período da banda, em dias.
-
-    fs : float
-        Frequência de amostragem em amostras por dia.
-
-    order : int
-        Ordem do filtro.
-
-    handle_nan : bool
-        Interpola valores ausentes antes da filtragem.
-
-    remove_trend : bool
-        Remove média e tendência linear antes do filtro.
-
-    Returns
-    -------
-    array
-        Série filtrada.
-    """
-
-    x = np.asarray( x, dtype=np.float64 )
-
-    output = np.full_like( x, np.nan )
-
-    valid = np.isfinite(x)
-
-    # Série sem dados suficientes
-    if valid.sum() < 20:
-        return output
-
-    if handle_nan:
-        index = np.arange(x.size)
-
-        x_filled = np.interp(
-            index,
-            index[valid],
-            x[valid]
-        )
-
-    else:
-        if not valid.all():
-            return output
-
-        x_filled = x.copy()
-
-    if remove_trend:
-        x_filled = detrend(
-            x_filled,
-            type="linear"
-        )
-
-    # Frequências em ciclos por dia
-    low_frequency = 1.0 / high_period
-    high_frequency = 1.0 / low_period
-
-    nyquist = 0.5 * fs
-
-    if high_frequency >= nyquist:
-        raise ValueError(
-            "A frequência superior da banda deve ser "
-            "menor que a frequência de Nyquist."
-        )
-
-    normalized_frequency = [
-        low_frequency / nyquist,
-        high_frequency / nyquist
-    ]
-
-    sos = butter(
-        order,
-        normalized_frequency,
-        btype="bandpass",
-        output="sos"
-    )
-
-    filtered = sosfiltfilt(
-        sos,
-        x_filled
-    )
-
-    # Restaura NaN nas posições originalmente ausentes
-    filtered[~valid] = np.nan
-
-    return filtered
 
 def bandpass_xarray(
     da,
@@ -187,88 +76,7 @@ def bandpass_xarray(
 
 
 
-def bandpass_xarray_fast(
-    da,
-    low_period=5,
-    high_period=7,
-    order=4,
-    time_dim="time",
-    remove_trend=True
-):
-    """
-    Filtro Butterworth vetorizado ao longo do tempo.
 
-    Muito mais rápido que aplicar uma função 1D
-    individualmente em cada ponto espacial.
-    """
-
-    dt_days = float(
-        np.median( np.diff(da[time_dim].values) / np.timedelta64(1, "D") )
-    )
-
-    fs = 1.0 / dt_days
-    nyquist = fs / 2.0
-
-    low_frequency = 1.0 / high_period
-    high_frequency = 1.0 / low_period
-
-    frequencies = [low_frequency / nyquist, high_frequency / nyquist]
-
-    sos = butter(order, frequencies, btype="bandpass", output="sos")
-
-    # Mantém toda a série temporal no mesmo bloco
-    if da.chunks is not None:
-        da = da.chunk({time_dim: -1})
-
-    original_order = da.dims
-
-    # Pequenas falhas são interpoladas ao longo do tempo
-    valid = da.notnull()
-
-    filled = da.interpolate_na(
-        dim=time_dim,
-        method="linear",
-        fill_value="extrapolate"
-    )
-
-    def filter_block(values):
-        """
-        values pode ser multidimensional.
-        O xarray coloca a dimensão core time no último eixo.
-        """
-
-        values = np.asarray( values, dtype=np.float64 )
-
-        if remove_trend:
-            values = detrend(values, axis=-1, type="linear")
-
-        return sosfiltfilt(sos, values, axis=-1)
-
-    filtered = xr.apply_ufunc(
-        filter_block, filled,
-        input_core_dims = [[time_dim]],
-        output_core_dims = [[time_dim]],
-        vectorize = False,
-        dask = "parallelized",
-        output_dtypes = [np.float64],
-        dask_gufunc_kwargs = {"allow_rechunk": False }
-    )
-
-    filtered = filtered.transpose(*original_order)
-
-    # Restaura os NaN originais
-    filtered = filtered.where(valid)
-
-    filtered.attrs = da.attrs.copy()
-
-    filtered.attrs.update({
-        "filter": "Butterworth bandpass",
-        "period_band":  f"{low_period}-{high_period} days",
-        "filter_order": order,
-        "sampling_frequency": f"{fs} samples per day",
-    })
-
-    return filtered
 def compute_ep_flux(
     ds: xr.Dataset,
     *,
@@ -478,30 +286,14 @@ def prepare_latitude_height_field(
 
 
 # if __name__ == "__main__":
-source = "JAWARA/data/zonal_mean/eddy_fluxes_2501.nc"
+    
+fn_day = '2503'
+
+path  = 'JAWARA/data/zonal_mean/'
+source = f"{path}eddy_fluxes_{fn_day}.nc"
 results = xr.open_dataset(source)
 
-results["u_prime"] = bandpass_xarray(
-    results["u_prime"],
-    low_period=5,
-    high_period=7,
-    order=4
-)
 
-results["v_prime"] = bandpass_xarray(
-    results["v_prime"],
-    low_period=5,
-    high_period=7,
-    order=4
-)
-
-results["t_prime"] = bandpass_xarray(
-    results["t_prime"],
-    low_period=5,
-    high_period=7,
-    order=4
-)
-
-
-ep = compute_ep_flux(results, hour=0)
-    # ep.to_netcdf("JAWARA/data/zonal_mean/ep_flux_2501.nc")
+ep = compute_ep_flux(results, hour =0)
+ 
+ep.to_netcdf(f"{path}ep_flux_{fn_day}.nc")
