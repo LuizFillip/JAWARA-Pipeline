@@ -250,13 +250,9 @@ def scale_ep_vectors_pressure(
     # Conversão altura -> pressão
     # -----------------------------------------
 
-    F_phi_pressure = (
-        F_phi_z / rho0
-    )
+    F_phi_pressure = (  F_phi_z / rho0  )
 
-    F_p = (
-        -gravity * F_z
-    )
+    F_p = (  -gravity * F_z )
 
     # -----------------------------------------
     # Escalonamento da figura
@@ -350,9 +346,8 @@ field = (
     )
     .sortby("latitude")
     .sortby("z_m")
-    .sel(
-        latitude=slice(0, 90),
-        z_m=slice(15_000, 120_000)
+    .sel(  latitude=slice(0, 90),
+           z_m=slice(15_000, 120_000)
     )
 )
 
@@ -395,8 +390,8 @@ ax.set_xlabel("Latitude (°)")
 ax.set_ylabel("Altitude (km)")
 
 vectors = field.isel(
-    latitude=slice(None, None, 4),
-    z_m=slice(None, None, 4)
+    latitude=slice(None, None, 2),
+    z_m=slice(None, None, 2)
 )
 
 U, V = scale_ep_vectors_pressure(
@@ -417,34 +412,34 @@ V = V.transpose(
     "latitude"
 )
 
-quiver = ax.quiver(
-    vectors["latitude"],
-    vectors["z_m"] / 1000.0,
-    U,
-    V,
-    color="black",
-    angles="uv",
-    scale_units="inches",
-    scale=2.0,
-    width=0.003,
-    headwidth=4,
-    headlength=5,
-    headaxislength=4.5,
-    pivot="middle"
-)
-
-# q = ax.quiver(
-#     vectors.latitude,
-#     vectors.z_m / 1000,
+# quiver = ax.quiver(
+#     vectors["latitude"],
+#     vectors["z_m"] / 1000.0,
 #     U,
 #     V,
+#     color="black",
 #     angles="uv",
 #     scale_units="inches",
-#     scale=0.8,
-#     color="black",
+#     scale=2.0,
 #     width=0.003,
+#     headwidth=4,
+#     headlength=5,
+#     headaxislength=4.5,
 #     pivot="middle"
 # )
+
+q = ax.quiver(
+    vectors.latitude,
+    vectors.z_m / 1000,
+    U,
+    V,
+    angles="uv",
+    scale_units="inches",
+    scale=0.8,
+    color="black",
+    width=0.003,
+    pivot="middle"
+)
 
 
 colorbar = fig.colorbar(
@@ -456,4 +451,40 @@ colorbar = fig.colorbar(
 colorbar.set_label(
     r"Aceleração zonal "
     r"(m s$^{-1}$ day$^{-1}$)"
+)
+
+print(
+    "U:",
+    float(np.nanpercentile(
+        np.abs(U),
+        50
+    )),
+    float(np.nanpercentile(
+        np.abs(U),
+        95
+    ))
+)
+
+print(
+    "V:",
+    float(np.nanpercentile(
+        np.abs(V),
+        50
+    )),
+    float(np.nanpercentile(
+        np.abs(V),
+        95
+    ))
+)
+
+ratio = (
+    np.abs(V)
+    / np.abs(U)
+)
+
+print(
+    "Mediana |V/U|:",
+    float(
+        np.nanmedian(ratio)
+    )
 )

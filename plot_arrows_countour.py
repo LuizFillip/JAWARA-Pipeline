@@ -256,7 +256,7 @@ def plot_ep_flux_vectors(
 
     return fig, ax
 
-dn = dt.datetime(2025, 2, 18)
+dn = dt.datetime(2025, 3, 5)
 fn = dn.strftime('%y%m')
 ep = xr.open_dataset(f'JAWARA/data/zonal_mean/ep_flux_{fn}.nc')
 plot_ep_flux_vectors(
@@ -265,7 +265,7 @@ plot_ep_flux_vectors(
     latitude_min=0,
     latitude_max=90,
     altitude_min=15,
-    altitude_max=110,
+    altitude_max=130,
     latitude_step=4,
     altitude_step=5,
     vector_scale=14,

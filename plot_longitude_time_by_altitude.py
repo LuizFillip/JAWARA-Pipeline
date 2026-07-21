@@ -1,94 +1,7 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Jul 16 22:18:00 2026
-
-@author: Luiz
-"""
-
 import base as b 
-
-def fixed_spatial_boxes_xr(
-    ds,
-    lat_step=10,
-    lon_step=10,
-    lat_center=None,
-    lat_name="latitude",
-    lon_name="longitude",
-    drop=True,
-):
-   
-
-    ds = ds.copy()
-
-    lat = ds[lat_name]
-    lon = ds[lon_name]
-
-    # Longitude no intervalo 0–360°
-    lon360 = lon % 360
-
-    ds = ds.assign_coords(
-        lon360=(lon_name, lon360.data)
-    )
-
-    # ---------------------------------------------------------
-    # Caixas de latitude
-    # ---------------------------------------------------------
-    if lat_center is None:
-
-        lat_box = (
-            np.floor((lat + 90) / lat_step)
-            * lat_step
-            - 90
-            + lat_step / 2
-        )
-
-        ds = ds.assign_coords(
-            lat_box=(lat_name, lat_box.data)
-        )
-
-    else:
-
-        half = lat_step / 2
-
-        mask = (
-            (lat >= lat_center - half)
-            & (lat < lat_center + half)
-        )
-
-        ds = ds.where(mask, drop=drop)
-
-        lat_box = xr.full_like(
-            ds[lat_name],
-            fill_value=float(lat_center),
-            dtype=float,
-        )
-
-        ds = ds.assign_coords(
-            lat_box=(lat_name, lat_box.data)
-        )
-
-    # ---------------------------------------------------------
-    # Caixas de longitude
-    # ---------------------------------------------------------
-    lon360 = ds["lon360"]
-
-    lon_box = (
-        np.floor(lon360 / lon_step)
-        * lon_step
-        + lon_step / 2
-    ) % 360
-
-    # Versão para plot no intervalo −180° a 180°
-    lon_box_plot = (
-        (lon_box + 180) % 360
-    ) - 180
-
-    ds = ds.assign_coords(
-        lon_box=(lon_name, lon_box.data),
-        lon_box_plot=(lon_name, lon_box_plot.data),
-    )
-
-    return ds
+import JAWARA as jw
+import numpy as np
+import matplotlib.pyplot as plt 
 
 
 def plot_longitude_time_by_altitude(
@@ -131,7 +44,7 @@ def plot_longitude_time_by_altitude(
         Tamanho da figura.
     """
 
-    ds = add_log_pressure_height(ds)
+    ds = jw.add_log_pressure_height(ds)
 
     lat_min = lat_center - lat_width / 2
     lat_max = lat_center + lat_width / 2
