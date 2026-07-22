@@ -294,10 +294,7 @@ def main():
           f"eddy_fluxes_{day_fn}.nc"
       )
       
-    ds.to_netcdf(
-         outfile,
-         engine="netcdf4", 
-     )
+    ds.to_netcdf( outfile, engine = "netcdf4")
 
 
-main()
+# main()
