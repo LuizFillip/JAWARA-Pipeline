@@ -285,15 +285,14 @@ def prepare_latitude_height_field(
     )
 
 
-# if __name__ == "__main__":
+def main():
+    fn_day = '2503'
     
-fn_day = '2503'
-
-path  = 'JAWARA/data/zonal_mean/'
-source = f"{path}eddy_fluxes_{fn_day}.nc"
-results = xr.open_dataset(source)
-
-
-ep = compute_ep_flux(results, hour =0)
- 
-ep.to_netcdf(f"{path}ep_flux_{fn_day}.nc")
+    path  = 'JAWARA/data/zonal_mean/'
+    source = f"{path}eddy_fluxes_{fn_day}.nc"
+    results = xr.open_dataset(source)
+    
+    
+    ep = compute_ep_flux(results, hour =0)
+     
+    ep.to_netcdf(f"{path}ep_flux_{fn_day}.nc")

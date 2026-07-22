@@ -1,5 +1,5 @@
 import xarray as xr 
-import numpy as np
+import JAWARA as jw
 import pandas as pd 
 import os 
 import warnings
@@ -13,11 +13,11 @@ warnings.filterwarnings(
 
 
 
-def load_data(fn):
+def load_data_netcdf(fn):
 
     ds = xr.open_dataset(fn)
     
-    ds = add_log_pressure_height(ds)
+    ds = jw.add_log_pressure_height(ds)
     
      
     doy = (

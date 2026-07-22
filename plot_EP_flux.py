@@ -99,7 +99,7 @@ def add_density(results):
 # results = Zonal_Heat_flux(results)
  
 
-source = "JAWARA/data/zonal_mean/eddy_fluxes_2501.nc"
-ds = xr.open_dataset(source)
+# source = "JAWARA/data/zonal_mean/eddy_fluxes_2501.nc"
+# ds = xr.open_dataset(source)
 
-ds.isel(level = 0)
+# ds.isel(level = 0)

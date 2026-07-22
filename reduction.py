@@ -35,16 +35,6 @@ def join_data():
     df = df.set_index("time") 
     return df
 
-df = join_data()
-
-
-
-#%%%%
- 
-
-ds = df.loc[ 
-    (df.index.time == dt.time(0, 0))
-    ].copy()
 
 
 def plot_temp_by_lon_doy(ds):
@@ -80,7 +70,14 @@ def plot_temp_by_lon_doy(ds):
         
         fig.colorbar(img)
         
-        
-plot_temp_by_lon_doy(ds)
+        df = join_data()
 
-# ds['t'].plot(kind = 'hist')
+         
+
+        ds = df.loc[ 
+            (df.index.time == dt.time(0, 0))
+            ].copy()
+
+    plot_temp_by_lon_doy(ds)
+
+ 

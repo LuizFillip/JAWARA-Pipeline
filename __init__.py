@@ -1,3 +1,3 @@
 from .reduction import load_data
-from .core import add_log_pressure_height
+from .core import load_data_netcdf
 from .calc_parameters import *
