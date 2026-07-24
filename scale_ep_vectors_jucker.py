@@ -334,34 +334,13 @@ def scale_ep_vectors_pressure(
 
     return U, V
 
-ep = xr.open_dataset('JAWARA/data/zonal_mean/ep_flux_2502.nc')
 
-date = "2025-02-18"
-
-field = (
-    ep
-    .sel(
-        time=date,
-        method="nearest"
-    )
-    .sortby("latitude")
-    .sortby("z_m")
-    .sel(  latitude=slice(0, 90),
-           z_m=slice(15_000, 120_000)
-    )
-)
+ds = xr.open_dataset(infile)
 
 
-acceleration = field[
-    "acceleration_day"
-]
+acceleration = field[ "acceleration_day" ]
 
-limit = float(
-    np.nanpercentile(
-        np.abs(acceleration.values),
-        98
-    )
-)
+limit = float( np.nanpercentile( np.abs(acceleration.values), 98 ) )
 
 norm = TwoSlopeNorm(
     vmin=-limit,
