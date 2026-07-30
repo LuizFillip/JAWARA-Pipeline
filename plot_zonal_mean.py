@@ -9,56 +9,9 @@ from indices import plot_kp_by_disturbed_level
 
 import core as c 
 b.sci_format()
-def MERRA2_comp():
-    from merra import load_merra, climatology_series 
-    
-    ds = load_merra()
-  
-    clim_only, _, s_real = climatology_series(
-        ds, "U_60N", 
-        start_year = 2025, 
-        start_month = 1, 
-        start_day = 1, 
-        end_month = 5, 
-        end_year = 2025
-        )
-    
-     
-    ax_zon.plot(
-        s_real.index,
-        s_real.values,
-        color="blue",
-        lw=3.0,
-        label= 'T, 60°-90° N'
-    ) 
-    
-    clim_only, _, s_real = climatology_series(
-        ds, "T_90N", 
-        start_year = 2025, 
-        start_month = 1, 
-        start_day = 1, 
-        end_month = 5, 
-        end_year = 2025
-        )
-    
-     
-    ax_tem.plot(
-        s_real.index,
-        s_real.values,
-        color="blue",
-        lw=3.0,
-        label= 'T, 60°-90° N'
-    ) 
-
-
-
-
-
-da_zon = jw.concat_datasets('U', latitude = 60)
-da_tem = jw.concat_datasets('T', latitude = 90)
  
- 
-#%%%%
+
+
 
 def plot_time_height_diagram(ax, info, field):
     
@@ -153,7 +106,7 @@ desc = {
     }
 
 
-def plot_ssw_parameters_and_kp():
+def plot_ssw_parameters_and_kp(da_tem, da_zon):
 
     
     fig, axes = plt.subplots(
@@ -209,7 +162,17 @@ def plot_ssw_parameters_and_kp():
             onset, lw = 4, 
             color = 'green', 
             linestyle = '--', 
-            label = 'SSW onset')
+            label = 'SSW onset'
+            )
+        
+        onset = dt.datetime(2025, 2, 10)
+        ax.axvline(
+            onset, lw = 4, 
+            color = 'green', 
+            linestyle = '--', 
+            label = 'SSW onset'
+            )
+        
         
         ax.text(0.01, 1.02, names[i], transform = ax.transAxes)
      
@@ -220,15 +183,18 @@ def plot_ssw_parameters_and_kp():
             )
         
         ax.set_xlim(xmin,  xmax )
-        
-        
-        ax.tick_params(
-            axis="x",
-            labelrotation=0
-        )
+       
+        ax.tick_params( axis="x",  labelrotation=0 )
         
       
     
     axes[-1].set(xlabel = 'Day of Year (2025)' ) 
     return fig
-    
+
+
+
+da_zon = jw.concat_datasets('U', latitude = 60)
+da_tem = jw.concat_datasets('T', latitude = 90)
+ 
+  
+plot_ssw_parameters_and_kp(da_tem, da_zon)
