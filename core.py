@@ -97,26 +97,96 @@ def main():
         ds.to_csv(save_in + fn.replace('nc', 'txt'))
         
 
-def concat_datasets(io, latitude = 60, zonal_mean = True):
-    datasets = []
+# def concat_datasets(io, latitude = 60, zonal_mean = True):
+#     datasets = []
     
-    for month in range(1, 5):
-        fn = rf"D:\database\JAWARA\{io}\{io}250{month}.nc"
+#     for month in range(1, 5):
+#         fn = rf"D:\database\JAWARA\{io}\{io}250{month}.nc"
     
-        ds_month = (
-            load_data_netcdf(fn).sel(
-                latitude = latitude, 
-                method = "nearest"
-                )
+#         ds_month = (
+#             load_data_netcdf(fn).sel(
+#                 latitude = latitude, 
+#                 method = "nearest"
+#                 )
             
-        )
+#         )
         
-        if zonal_mean:
-            ds_month = ds_month.mean("longitude", skipna=True)
+#         if zonal_mean:
+#             ds_month = ds_month.mean("longitude", skipna=True)
     
-        datasets.append(ds_month)
+#         datasets.append(ds_month)
      
-    # Concatena janeiro–abril pelo tempo
+#     # Concatena janeiro–abril pelo tempo
+#     ds = xr.concat(
+#         datasets,
+#         dim="time",
+#         data_vars="minimal",
+#         coords="minimal",
+#         compat="override",
+#         join="exact",
+#     )
+    
+#     # Ordena e remove possíveis tempos duplicados
+#     ds = ds.sortby("time")
+    
+#     _, idx = np.unique(
+#         ds.time.values,
+#         return_index=True,
+#     )
+    
+    
+#     return ds.isel(time=np.sort(idx))
+
+from pathlib import Path
+ 
+
+
+def concat_datasets(io, latitude=60.0, zonal_mean=True):
+    """
+    Carrega e concatena arquivos mensais JAWARA de janeiro a abril de 2025.
+
+    Parameters
+    ----------
+    io : str
+        Nome da variável e da pasta, por exemplo: "U", "V" ou "T".
+    latitude : float, default=60.0
+        Latitude selecionada pelo método do vizinho mais próximo.
+    zonal_mean : bool, default=True
+        Se True, calcula a média zonal sobre longitude.
+
+    Returns
+    -------
+    xr.Dataset ou xr.DataArray
+        Dados concatenados, ordenados temporalmente e sem tempos duplicados.
+    """
+    datasets = []
+
+    base_path = Path(r"D:\database\JAWARA") / io
+
+    for month in range(1, 5):
+        filename = base_path / f"{io}25{month:02d}.nc"
+
+        if not filename.exists():
+            raise FileNotFoundError(
+                f"Arquivo não encontrado: {filename}"
+            )
+
+        ds_month = load_data_netcdf(filename)
+
+        ds_month = ds_month.sel(
+            latitude=latitude,
+            method="nearest",
+        )
+
+        if zonal_mean and "longitude" in ds_month.dims:
+            ds_month = ds_month.mean(
+                dim="longitude",
+                skipna=True,
+                keep_attrs=True,
+            )
+
+        datasets.append(ds_month)
+
     ds = xr.concat(
         datasets,
         dim="time",
@@ -124,15 +194,22 @@ def concat_datasets(io, latitude = 60, zonal_mean = True):
         coords="minimal",
         compat="override",
         join="exact",
+        combine_attrs="override",
     )
-    
-    # Ordena e remove possíveis tempos duplicados
+
+    # Ordena cronologicamente
     ds = ds.sortby("time")
-    
-    _, idx = np.unique(
-        ds.time.values,
+
+    # Remove tempos duplicados, preservando a primeira ocorrência
+    time_values = np.asarray(ds["time"].values)
+
+    _, unique_indices = np.unique(
+        time_values,
         return_index=True,
     )
-    
-    
-    return ds.isel(time=np.sort(idx))
+
+    ds = ds.isel(
+        time=np.sort(unique_indices)
+    )
+
+    return ds

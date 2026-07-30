@@ -127,7 +127,7 @@ def plot_ssw_parameters_and_kp(da_tem, da_zon):
     
     ax_zon.set(
         ylim = [-60, 80], 
-        yticks = np.arange(-60, 70, 10)
+        yticks = np.arange(-60, 70, 20)
         )
     
     
@@ -165,13 +165,13 @@ def plot_ssw_parameters_and_kp(da_tem, da_zon):
             label = 'SSW onset'
             )
         
-        onset = dt.datetime(2025, 2, 10)
-        ax.axvline(
-            onset, lw = 4, 
-            color = 'green', 
-            linestyle = '--', 
-            label = 'SSW onset'
-            )
+        # onset = dt.datetime(2025, 2, 10)
+        # ax.axvline(
+        #     onset, lw = 4, 
+        #     color = 'green', 
+        #     linestyle = '--', 
+        #     label = 'SSW onset'
+        #     )
         
         
         ax.text(0.01, 1.02, names[i], transform = ax.transAxes)
@@ -193,8 +193,13 @@ def plot_ssw_parameters_and_kp(da_tem, da_zon):
 
 
 
-da_zon = jw.concat_datasets('U', latitude = 60)
-da_tem = jw.concat_datasets('T', latitude = 90)
- 
-  
-plot_ssw_parameters_and_kp(da_tem, da_zon)
+def main():
+    
+    da_zon = jw.concat_datasets('U', latitude = 60)
+    da_tem = jw.concat_datasets('T', latitude = 90)
+     
+      
+    fig = plot_ssw_parameters_and_kp(da_tem, da_zon)
+    
+    save_in = 'G:\\Meu Drive\\Papers\\SSW_2025_waves\\agutemplate\\'
+    fig.savefig(save_in + 'Jawara_timeseries', dpi = 300)
