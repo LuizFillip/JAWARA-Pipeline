@@ -5,6 +5,7 @@ import os
 import warnings
 from tqdm import tqdm 
 import numpy as np 
+from pathlib import Path
 
 warnings.filterwarnings(
     "ignore",
@@ -97,50 +98,7 @@ def main():
         ds.to_csv(save_in + fn.replace('nc', 'txt'))
         
 
-# def concat_datasets(io, latitude = 60, zonal_mean = True):
-#     datasets = []
-    
-#     for month in range(1, 5):
-#         fn = rf"D:\database\JAWARA\{io}\{io}250{month}.nc"
-    
-#         ds_month = (
-#             load_data_netcdf(fn).sel(
-#                 latitude = latitude, 
-#                 method = "nearest"
-#                 )
-            
-#         )
-        
-#         if zonal_mean:
-#             ds_month = ds_month.mean("longitude", skipna=True)
-    
-#         datasets.append(ds_month)
-     
-#     # Concatena janeiro–abril pelo tempo
-#     ds = xr.concat(
-#         datasets,
-#         dim="time",
-#         data_vars="minimal",
-#         coords="minimal",
-#         compat="override",
-#         join="exact",
-#     )
-    
-#     # Ordena e remove possíveis tempos duplicados
-#     ds = ds.sortby("time")
-    
-#     _, idx = np.unique(
-#         ds.time.values,
-#         return_index=True,
-#     )
-    
-    
-#     return ds.isel(time=np.sort(idx))
-
-from pathlib import Path
  
-
-
 def concat_datasets(io, latitude=60.0, zonal_mean=True):
     """
     Carrega e concatena arquivos mensais JAWARA de janeiro a abril de 2025.
