@@ -40,7 +40,7 @@ def plot_time_height_diagram(ax, info, field):
 
 
 
-def avg_stratosphere(ax, field, name, altitude = 32):
+def avg_stratosphere(ax, field, name, unit, altitude = 32):
     ax_right = ax.twinx()
     
     series_32km = field.sel(
@@ -60,7 +60,7 @@ def avg_stratosphere(ax, field, name, altitude = 32):
     
     b.change_axes_color(ax_right, "blue", side="right")
     
-    ax_right.set_ylabel( "Average at 32 km (m/s)" )
+    ax_right.set_ylabel(f"Average at 32 km {unit}" )
     
     return ax_right 
     
@@ -81,7 +81,8 @@ def plot_field(ax, da, io):
     
     ax_right =  plot_time_height_diagram(ax, info, field)
     
-    ax_right = avg_stratosphere(ax, field, info['label'])
+    ax_right = avg_stratosphere(
+        ax, field, info['label'], info['unit'])
     
     return ax_right 
  
@@ -97,12 +98,16 @@ desc = {
         'unit': '(m/s)', 
         'cmap': "RdBu_r"
         },
-    'U': {'label': "Zonal wind", 
-          'unit': '(m/s)', 
-          'cmap': "RdBu_r"},
-    'T': {'label': "Temperature", 
-          'unit': '(K)', 
-          'cmap': 'turbo'}
+    'U': {
+        'label': "Zonal wind", 
+        'unit': '(m/s)', 
+        'cmap': "RdBu_r"
+        },
+    'T': {
+        'label': "Temperature", 
+        'unit': '(K)', 
+        'cmap': 'turbo'
+        }
     }
 
 
@@ -142,8 +147,14 @@ def plot_ssw_parameters_and_kp(da_tem, da_zon):
     
     xmin = dt.datetime(2025, 1, 1)
     xmax = dt.datetime(2025, 4, 30)
-    plot_kp_by_disturbed_level( axes[-1], c.low_omni(), xmin, xmax  )
     
+    ds = c.low_omni()
+    plot_kp_by_disturbed_level( axes[-1], ds, xmin, xmax  )
+    ax2 = axes[-1].twinx()
+    
+    ax2.step(ds['f10.7'], color = 'k')
+    
+    ax2.set(xlim = [xmin, xmax ], label = 'F10.7 (sfu)')
     names = [
         '(a) JAWARA temperature at 90°N', 
         '(b) JAWARA zonal wind at 60°N',  
@@ -165,14 +176,7 @@ def plot_ssw_parameters_and_kp(da_tem, da_zon):
             label = 'SSW onset'
             )
         
-        # onset = dt.datetime(2025, 2, 10)
-        # ax.axvline(
-        #     onset, lw = 4, 
-        #     color = 'green', 
-        #     linestyle = '--', 
-        #     label = 'SSW onset'
-        #     )
-        
+ 
         
         ax.text(0.01, 1.02, names[i], transform = ax.transAxes)
      
@@ -193,13 +197,16 @@ def plot_ssw_parameters_and_kp(da_tem, da_zon):
 
 
 
-def main():
+# def main():
     
-    da_zon = jw.concat_datasets('U', latitude = 60)
-    da_tem = jw.concat_datasets('T', latitude = 90)
-     
-      
-    fig = plot_ssw_parameters_and_kp(da_tem, da_zon)
+da_zon = jw.concat_datasets('U', latitude = 60)
+da_tem = jw.concat_datasets('T', latitude = 90)
+ 
+  
+fig = plot_ssw_parameters_and_kp(da_tem, da_zon)
+
+save_in = 'G:\\Meu Drive\\Papers\\SSW_2025_waves\\agutemplate\\'
+    # fig.savefig(save_in + 'Jawara_timeseries', dpi = 300)
     
-    save_in = 'G:\\Meu Drive\\Papers\\SSW_2025_waves\\agutemplate\\'
-    fig.savefig(save_in + 'Jawara_timeseries', dpi = 300)
+# main()
+
